@@ -1,0 +1,46 @@
+#THIS IS CLI installation
+#AWS CLI
+pip install awscli --upgrade --user
+aws --version
+pip install awscli --upgrade --user
+#To uninstall
+pip uninstall awscli
+aws configure
+#it asks about the region and all the stuff
+
+
+#AWS EB-CLI INSTALLATION
+
+pip install awsebcli --upgrade --user
+#update profile
+ls -a ~
+.  ..  .bash_logout  .bash_profile  .bashrc  Desktop  Documents  Downloads
+#exporting PATH Variable
+export PATH=LOCAL_PATH:$PATH
+#Load the Profile script
+source ~/PROFILE_SCRIPT
+#Verify that the EB CLI installed correctly by running eb --version.
+eb --version
+# for any future upgrades
+pip install awsebcli --upgrade --user
+
+##virtual eb cli if requires
+#Install virtualenv with pip.
+pip install --user virtualenv
+#Create a virtual environment.
+virtualenv ~/eb-ve
+#You can use the -p option to use a Python executable other than the default.
+virtualenv -p /usr/bin/python3.4 ~/eb-ve
+#Activate the virtual environment.
+source ~/eb-ve/bin/activate
+#Install the EB CLI.
+pip install awsebcli --upgrade
+#Verify that the EB CLI is installed correctly.
+eb --version
+pip install awsebcli --upgrade
+
+#LINKS 
+#https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/eb-cli3-install.html
+#https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/eb-cli3-install-virtualenv.html
+
+
