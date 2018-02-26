@@ -1,0 +1,67 @@
+Data Warehouse Workshop
+Build reports for https://askubuntu.com 
+Overview
+In this workshop, you will learn to write complex SQL queries, create indexes, optimize query performance, and design a data warehouse using star/snowflake schema.
+
+You will be provided a fully normalized database of https://askubuntu.com. AskUbuntu is a popular question and answer website dedicated to Ubuntu operating system. The version of database we will use has 510K users, 278K questions, 360K answers, and about 2.9M votes.
+
+While AskUbuntu.com is built using MS SQL, we will use the open source Postgres server. 
+Credits
+Thanks to StackExchange for graciously providing data dumps, and for archive.org for hosting it!
+
+License
+This document is copyright of HashedIn Technologies, and is made available under the terms of Creative Commons Attribution 4.0 International (CC BY 4.0).
+
+
+
+Table of Contents
+Overview	1
+Credits	1
+License	1
+Table of Contents	2
+Chapter 1: Getting Started	3
+Understand the Schema	3
+Assignments	4
+
+Chapter 1: Getting Started
+1. Install Postgres server
+2. Login to psql
+3. create  database askubuntu;
+4. create user askubuntu with password ‘askubuntu’;
+5. grant all privileges on database askubuntu to askubuntu;
+6. Close psql 
+7. Import the database locally using this command
+gunzip -c askubuntu_pg.gz | psql askubuntu
+8. Run psql -U askubuntu
+9. Run select count(*) from Posts;
+You should see 645530
+
+At this point, your postgres server has all the data for https://askubuntu.com 
+Understand the Schema
+See StackExchange / AskUbuntu Database Schema to understand the tables and columns.
+
+This database only enforces Primary Keys. It does not have any indexes, foreign keys or constraints. This is intentional, we ask you to define the indexes / constraints as part of this workshop.
+
+Assignments
+1. Show top 10 users by reputation
+2. Show top 10 questions asked by user ‘Mitch’, ordered by question score
+3. Show top 10 most popular badges, sorted by number of users who have this badge
+4. For users with reputation > 75,000, display user id, user name, reputation and total number of questions that they have asked
+5. Print userid, user name and reputation for users whose reputation is higher than the user ‘Takkat’
+6. Return a list of users (id, display name, reputation) that match ALL the following criteria:
+Have a reputation greater than 1000 AND
+Have received a score of 10 or more on at least one of their comments, AND
+Have at least one of the badges Nice Answer, Good Answer or Great Answer
+Sort the users by reputation in descending order.
+7. Find duplicate comments. Duplicate comments are defined as the same user posting the exact same comment twice or more on the same question/answer within a time interval of 1 minute.
+8. Bulk update - Add two new fields to the users table - TotalQuestionsAsked and TotalQuestionsAnswered. Write update queries to populate these columns based on the existing data.
+9. Tag Score - When a user logs in, we want to display their answer reputation broken down by tag. Something like this screen:
+
+The logic for calculating tag score for a user is as follows - 
+Find answers answered by the current user
+For each answer, find out the tags. Tags are only available on Question
+If an answer has a score of 12, and has the corresponding question has 3 tags, say redis, python and http - then each of those tags gets a score of 4
+You have to then sum up the scores for each tag, and then sort the results by the score.
+The output should only have two columns - tag name and score
+
+10. Show posts where the title has been modified more than 5 times by the user who created the post. As an example, see https://askubuntu.com/posts/137426/revisions. Such Posts indicate problems with the content.
