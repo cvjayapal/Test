@@ -1,0 +1,546 @@
+Redis Overflow
+
+Build a clone of StackOverflow.com using Redis
+
+Overview
+RedisOverflow is a clone of stackoverflow.com built with just Redis as the database. We will only concentrate on the data storage and retrieval, and will not actually build the user interface. 
+
+
+We will work on https://datascience.stackexchange.com, which is a smaller website by StackOverflow, but dedicated to data science. Each assignment will then explore how a certain feature of the website can be built. In the first few sections, we will work on existing data that you can download from here. In subsequent sections, we will enhance the data model to add new features.
+
+Disclaimer
+StackOverflow / StackExchange doesn’t actually store data like this. We have their entire data because they graciously make it available at archive.org. For this tutorial, we made a copy of that data and stored it in redis. 
+
+
+License
+This document is copyright of HashedIn Technologies, and is made available under the terms of Creative Commons Attribution 4.0 International (CC BY 4.0).
+
+
+
+
+Table of Contents
+Overview	1
+
+Disclaimer	1
+
+License	1
+
+Table of Contents	2
+
+Chapter 1: Getting Started	4
+
+Copy data for datascience.stackexchange.com	4
+
+Connecting Python and Redis	4
+
+Understand the Schema	5
+
+Section 1: Build the Question and Answer Page	7
+
+Assignment #1: Fetch Basic Question Details	7
+
+Assignment #2: Fetch Tags for a Question	7
+
+Assignment #3: Get Comments for a Question	7
+
+Assignment #4: Get Linked Questions for this Question	7
+
+Assignment #5: Get all Answers for this Question	8
+
+Assignment #6: Get user display names	8
+
+Assignment #7: Experiment with other Questions	8
+
+Section #2: Build User Profile Page	9
+
+Assignment #8: Get Basic User Details	9
+
+Assignment #9: Get the number of questions asked by this user	9
+
+Assignment #10: Get number of answers answered by this user	9
+
+Assignment #11: Get top 20 questions asked by this user	9
+
+Assignment #12: View all badges this user has earned	9
+
+Assignment #13: Get rank of this user	9
+
+Assignment #14: Get 5 users ranked above and below this user	9
+
+Assignment #15: Show top 50 users ranked by all time reputation	10
+
+Section #3 Listing Pages	11
+
+Assignment #16: List recent questions tagged python	11
+
+Assignment #17: List popular questions that are tagged python	11
+
+Assignment #18: List questions tagged Python and Keras	11
+
+Section #4: Writing to the Database	12
+
+Assignment #19: Upvote a Question	12
+
+Assignment #19: Upvote Question without Race Conditions	12
+
+Assignment #20: Downvote a Comment	12
+
+Assignment #21: Add a new Comment	12
+
+Assignment #22: Create a new Tag	12
+
+Assignment #23: Add Badges Information	12
+
+Assignment #24: Track Unanswered Questions	13
+
+Assignment #25: Stream events to another system	13
+
+Appendix A: Schema for StackOverflow	14
+
+Questions	14
+
+Answers	14
+
+Comments	14
+
+Users	14
+
+Tags	14
+
+Badges	14
+
+
+Chapter 1: Getting Started
+The first step is installing redis. On ubuntu, run the following command:
+
+sudo apt-get install redis-server. On MacBook, follow instructions from this website.
+
+
+Next, try to connect to the redis server on your local machine. Run redis-cli, you should see a prompt similar to
+
+127.0.0.1:6379>.
+
+This is the redis command line interface, and it lets you run commands against redis server. Run the command ping, if you see a pong in response, your installation is successful.
+
+Copy data for datascience.stackexchange.com
+Run the command config get dir in redis-cli. This will print the direction where redis stores it’s data files. It usually is /var/lib/redis, but it can be different on your laptop.
+
+
+Next, do the following - 
+
+Stop redis by running the command 
+On Linux: sudo /etc/init.d/redis-server stop
+On Mac: brew services stop redis
+
+cd /var/lib/redis (or whatever directory has your database file)
+
+Delete dump.rdb 
+
+Download datascience.rdb from https://drive.google.com/open?id=1kiiNFLhqcLJFCXicp4kAgyyRxOeFHyg1, rename it to dump.rdb, and copy it to this director
+
+Start redis by running the command
+On Linux: sudo /etc/init.d/redis-server start
+
+Start redis-cli
+
+Run info keyspace, you should see db0:keys = 120204
+
+
+At this point, your redis server has all the data for https://datascience.stackexchange.com (henceforth abbreviated as DS.SE.com)
+
+Connecting Python and Redis
+We will use python to connect with redis. 
+
+Create a directory redisoverflow, and cd into it
+
+virtualenv -p python3 venv 
+
+source venv/bin/activate
+
+pip install redis
+
+touch redisoverflow.py 
+
+Copy the contents of this gist into redisoverflow.py 
+
+Run python redisoverflow.py 
+
+You should see a message “connected to redis successfully” 
+
+Additionally, you should see the solution of assignment 1
+(we wrote the solution so you can use it as a starting point)
+
+
+Understand the Schema
+Let’s understand how DS.SE.com works. 
+
+DS.SE.com is a question and answer website. 
+
+Users can ask questions, and other users can answer them. 
+
+Questions and Answers are upvoted/downvoted by users if they find them useful/incorrect.
+
+Both questions and answers can have comments. 
+
+Users have a reputation, which is a point system based on how many people upvoted their questions or answers
+
+
+In redis, this data is stored as follows - 
+
+Questions is hash data structure. A question is identified by the key questions:<id>. Here is how it looks:
+
+questions:694 / hash
+
+Field 
+
+Value
+
+id
+
+694
+
+title
+
+Best python library for neural networks
+
+score
+
+100
+
+owneruserid
+
+989
+
+view_count
+
+62995
+
+...
+
+...
+
+
+Think of questions:694 as an object of the class Question. Objects are typically stored as hash in redis.
+
+Similarly, we have hashes for answers, comments, users and tags. The key is always answers:<id>, comments:<id> etc. Think of a 
+
+Next, we want to store tags for a given question. A question can have upto 5 tags. Because this is a one-to-many relationship, we cannot store it within the hash for the question. So we make a new key called questions:694:tags. This key has the data type set. This set will store the tags. 
+
+	
+
+questions:694:tags / set
+
+members
+
+neural-network
+
+machine-learning
+
+python
+
+
+A set does not allow duplicates. Also, a set does not maintain order of its elements. 
+
+
+Next, we want to store comments for a given question. Similar to tags, one question can have multiple comments, so this is a 1:many relationship. Therefore, we cannot store it within the questions:<id> hash. However, unlike tags, comments have to be in a particular order - typically the order in which the comments were created. So, instead of a set, we use the list data structure to store the comment ids.
+
+Note: ideally, the key should have been questions:694:comments. But for reasons that will be known later, the key is posts:694:comments.
+
+
+posts:694:comments / list
+
+elements
+
+1733
+
+2291
+
+6758
+
+6791
+
+6807 ….
+
+
+You will wonder why are we storing numbers like 1733 instead of the comment. These numbers are the ids for the comment object. The comment object itself is stored in a separate hash, like this:
+
+
+comments:2291 / hash
+
+Field 
+
+Value
+
+id
+
+2291
+
+postid
+
+694
+
+text
+
+If you want to only use Restricted Boltzmann Machine, you can stick with scikit-learn as well.
+
+userid
+
+3342
+
+score
+
+0
+
+...
+
+...
+
+
+So to get all the comments for a question,
+
+We first get the ids from the list questions:<id>:comments… 
+
+… and then in a loop get each of the comment:<id> hash objects.
+
+
+That is the very quick introduction to the way the data is stored in redis. Refer to Appendix A - Schema, for complete information on all the keys. 
+
+
+
+Section 1: Build the Question and Answer Page
+In this section, we will be building the question and answer page. Our Redis database already has the data, so we will concentrate on fetching the data from Redis. Later sessions will focus on writing data to redis.
+
+
+We will incrementally build this page - Best Python library for machine neural networks. For each assignment, write a function in redisoverflow.py file. 
+
+
+Tip: The first assignment is done for you. Understand how it works before you move to the subsequent assignments.
+
+Assignment #1: Fetch Basic Question Details
+In redis-cli, write the command that will fetch all question details, including title, description, votes and so on. Once you have understood the command, write a python function in redisoverflow.py to get the question details.
+
+
+Hints:
+
+Question ID is in the URL
+
+Questions is a hash data structure, review documentation for hash to figure out which command you should use
+
+Assignment #2: Fetch Tags for a Question
+For the same question, fetch all the tags from redis. Also write down the time complexity for this command.
+
+
+Hints:
+
+Tags for a question is a set, review documentation for sets.
+
+
+Assignment #3: Get Comments for a Question
+Get all comments for a question in sorted order so you can display on the page. For each comment, we want the text, author id, votes and the time the comment was posted. Ignore display name of the author for now.
+
+
+Assignment #4: Get Linked Questions for this Question
+Get all the linked questions for this question. Also, sort the questions according to the score of each linked question.
+
+
+In this assignment, you must use pipelining. Without pipelining, you will send one command to redis-server, wait for answer, then send the next on, wait for answer and so on. If you use pipelining, you are sending all the commands in one batch, and then getting the response in another batch.
+
+Assignment #5: Get all Answers for this Question
+Get all answers for this question. We want 3 variations for this function, each with slightly different sorting:
+
+Sort by Votes
+
+Sort by Oldest first
+
+Sort by Active
+
+
+It is assumed that you will use pipelining for this assignment, and any future assignments - if it makes sense.
+
+Assignment #6: Get user display names
+Every question, answer, and comment has a author. The author is always displayed along with the question/answer/comment. Write a python function that collects all the user ids for this page in a python set, and then fetches the corresponding user names in one redis request. 
+
+Assignment #7: Experiment with other Questions
+You have the entire database of DS.SE.com, so you can pick any other question page and see if your functions work. 
+
+
+Section #2: Build User Profile Page
+Continuing from previous section, we will now build the user profile page. Here is an example of a user profile page - https://datascience.stackexchange.com/users/8820/martin-thoma
+
+
+As always, the user id is in the URL, 8820 in this case. But you can pick any user for your assignment. 
+
+Assignment #8: Get Basic User Details
+Fetch basic user details such as id, name, location and so on. 
+
+
+Assignment #9: Get the number of questions asked by this user
+A small hint - find the the key that stores all questions asked by this user. Then figure out a command that will get you the number of elements inside this data structure.
+
+Assignment #10: Get number of answers answered by this user
+Similar to assignment #9
+
+Assignment #11: Get top 20 questions asked by this user
+The results should be sorted according to score of the question, highest score first. Your function should only get id, title, score and creation data for each question. As always, it must use pipelining to reduce the back and forth between python and redis-server.
+
+Assignment #12: View all badges this user has earned
+Display all the badges this user has earned. 
+
+
+Assignment #13: Get rank of this user
+Users are ranked according to their score. Write a python function to print the rank of this user. 
+
+Assignment #14: Get 5 users ranked above and below this user
+For user id = 84, get 5 users ranked above this user, and 5 users ranked just below this user. 
+
+
+Assignment #15: Show top 50 users ranked by all time reputation
+Here is the URL for this assignment: https://datascience.stackexchange.com/users?tab=Reputation&filter=all
+
+
+You have to print the top 50 users along with their basic details as shown in the above page.
+
+
+
+
+
+Section #3 Listing Pages
+
+Assignment #16: List recent questions tagged python
+List 50 questions tagged python. The most recently asked questions should come up first.
+
+
+Assignment #17: List popular questions that are tagged python
+List top 50 questions tagged python, ordered such that questions with highest score show up first.
+
+Assignment #18: List questions tagged Python and Keras
+To understand this question, see this page - https://datascience.stackexchange.com/questions/tagged/python+keras
+
+
+You want to display questions that are tagged python AND keras, and then sort the output such that the highest voted questions come up first.
+
+
+
+
+
+Section #4: Writing to the Database
+In this section, we will cover commands that will write to redis database. 
+
+Assignment #19: Upvote a Question
+Let’s say a user upvotes question whose id is 694. Write a python function to save this in redis database. 
+
+
+Hint: You will have to update this information in multiple places
+
+Assignment #19: Upvote Question without Race Conditions
+You would have written multiple commands to solve the previous assignment. It is possible that in between someone else updated the data from another process / thread. Write another function that now avoids race conditions. Read Redis’ documentation on how you can achieve this.
+
+Assignment #20: Downvote a Comment
+Similar to the previous two assignments, but this time some user downvotes a particular comment. This time you must update redis in an atomic manner -  i.e. avoid race conditions.
+
+Assignment #21: Add a new Comment
+User with id = 8820, adds a new comment with some text. You need to save this to the redis database. 
+
+
+Hint:
+
+How will you figure out the id for the comment you are about to create? First create a counter for storing the last inserted comment id / max comment id.
+
+How will you ensure atomicity of this insert? 
+
+Assignment #22: Create a new Tag
+The administrator decided to add a new tag to question ID = 694 - say “opinion”, because people put in their opinions in this question. This tag does not exist - so it must first be created, and then question id = 694 will be tagged with it. 
+
+
+As always, you must write it in an atomic manner and prevent race conditions. 
+
+Assignment #23: Add Badges Information
+If you observe the user profile page, below each user we have three numbers. These represent the number of gold/silver/bronze badges this user has earner. 
+
+
+However, our database does not have this information, so it is not possible to show this. We will now like to write a migration script that goes and updates all our users with this new piece of information. 
+
+
+Here is how this should work - 
+
+Go to https://datascience.stackexchange.com/help/badges. Each badge is categorized as gold/silver/bronze
+
+In a for loop, iterate over all users using the scan command
+
+For each user, get the badges for that user from redis
+
+Count the number of badges in each category
+
+Then, update the user hash to add three new fields - badges_gold, badges_silver and badges_bronze
+
+
+Assignment #24: Track Unanswered Questions
+Currently, our database does not maintain a list of unanswered questions. Unanswered questions are questions where answer_count = 0. 
+
+
+Write a one time migration script to store unanswered question ids in redis, ordered by the time the question was asked. 
+
+After that, write a function to add a new Answer for a question. This function should take care of updating all the appropriate data structures in redis.
+
+
+Assignment #25: Stream events to another system
+Whenever changes occur in a question / answer / comment, other modules need to be informed. By using an event driven architecture, we can separate the module responsible from writing the change and the module that is supposed to take an action on that change.
+
+
+For example, when a new comment is added to a question, every user who has participated in that question / answer should be sent a notification. The module that inserts a comment does not want to worry about sending notification
+
+
+Your assignment: You have learned about a new feature in Redis, called Streams - which is meant to solve this use case. You have historic data of all change events in a file call PostHistory.xml. Parse this file, and all historic events to a redis stream called as “post-events”. 
+
+
+
+
+Appendix A: Schema for StackOverflow
+Questions
+questions:<id> -> a hash containing questions details
+
+questions:<id>:answers -> a set containing answer ids for this question
+
+questions:<id>:tags -> a set of tags assigned to this question
+
+questions:<id>:related_questions -> a set containing question ids that are related to this question
+
+Answers
+answers:<id> -> a hash containing answer details
+
+Comments
+comments:<id> -> a hash containing comment details
+
+post:<id>:comments -> a list of comment ids, sorted by time the comment was posted. A post can be a question or an answer. Post Id can be question id or answer id. See comments:<id> for details on how comments are stored
+
+Users
+users:<id> -> a hash containing user details
+
+users:<id>:comments -> a sorted set, key = commentid, score = score of the comment. This sorted set only contains comments created by this user.
+
+users:<id>:badges -> a set of badges assigned to this user
+
+users:<id>:questions_by_score -> a sorted set, key = question id, score = score of the question. This sorted set only contains questions created by this user
+
+users:<id>:answers_by_score -> a sorted set, key = answer id, score = score of the answer. This sorted set only contains answers created by this user
+
+user:<id>:questions_by_views -> a sorted set, key = questionid, 
+score = number of views for this question. This sorted set only contains questions created by this user
+
+users_by_reputation -> a sorted set, key = userid, value is reputation of user
+
+Tags
+tags:<id> -> a hash containing tag details
+
+tags:<id>:questions_by_score -> a sorted set, key = question id, score = score of the question. This sorted set only contains questions that have the given tag id
+
+tags:<id>:questions_by_views -> a sorted set, key = questionid, score = number of views for this post. This sorted set only contains questions that have the given tag id
+
+tags:<id>:recent_questions -> a trimmed list of questions under this tag, ordered by time
+
+Badges
+badges:<id>:users -> a set of users that have this badge
+
+badges_by_popularity -> a sorted set, key = badge name, value is number of users that have this badge
+
+
